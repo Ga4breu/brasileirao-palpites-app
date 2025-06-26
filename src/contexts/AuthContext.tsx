@@ -36,66 +36,99 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulating checking for existing session
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+
+    fetch(`${import.meta.env.VITE_API_URL}/api/profile`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Failed');
+        const data = await res.json();
+        setUser({
+          id: data.id,
+          name: data.name,
+          email: data.email,
+          avatar: '',
+          points: 0,
+          position: 0,
+          exactPredictions: 0,
+          roundsWon: 0
+        });
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const login = async (email: string, password: string) => {
     setLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const mockUser: User = {
-      id: '1',
-      name: 'João Silva',
-      email: email,
+    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    if (!res.ok) {
+      setLoading(false);
+      throw new Error('Invalid credentials');
+    }
+
+    const data = await res.json();
+    localStorage.setItem('token', data.token);
+    setUser({
+      id: data.user.id,
+      name: data.user.name,
+      email: data.user.email,
       avatar: '',
-      points: 245,
-      position: 3,
-      exactPredictions: 12,
-      roundsWon: 2
-    };
-    
-    setUser(mockUser);
-    localStorage.setItem('user', JSON.stringify(mockUser));
+      points: 0,
+      position: 0,
+      exactPredictions: 0,
+      roundsWon: 0
+    });
     setLoading(false);
   };
 
   const register = async (name: string, email: string, password: string) => {
     setLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const mockUser: User = {
-      id: '1',
-      name: name,
-      email: email,
+    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password })
+    });
+
+    if (!res.ok) {
+      setLoading(false);
+      throw new Error('Registration failed');
+    }
+
+    const data = await res.json();
+    localStorage.setItem('token', data.token);
+    setUser({
+      id: data.user.id,
+      name: data.user.name,
+      email: data.user.email,
       avatar: '',
       points: 0,
-      position: 999,
+      position: 0,
       exactPredictions: 0,
       roundsWon: 0
-    };
-    
-    setUser(mockUser);
-    localStorage.setItem('user', JSON.stringify(mockUser));
+    });
     setLoading(false);
   };
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('user');
+    localStorage.removeItem('token');
   };
 
   const updateProfile = (data: Partial<User>) => {
     if (user) {
       const updatedUser = { ...user, ...data };
       setUser(updatedUser);
-      localStorage.setItem('user', JSON.stringify(updatedUser));
     }
   };
 
