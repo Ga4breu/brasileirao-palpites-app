@@ -3,12 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useEffect, useState } from 'react';
 import { Trophy, Target, CheckCircle, XCircle, Minus } from 'lucide-react';
+import { getMatches, getPredictions, getRanking } from '@/lib/api';
 
 interface GameResult {
   id: string;
   homeTeam: string;
   awayTeam: string;
+  round: number;
   homeScore: number;
   awayScore: number;
   prediction?: {
@@ -23,55 +26,51 @@ interface RankingPlayer {
   name: string;
   position: number;
   points: number;
-  exactPredictions: number;
-  avatar?: string;
 }
 
 const ResultadosPage = () => {
-  // Mock data for game results
-  const gameResults: GameResult[] = [
-    {
-      id: '1',
-      homeTeam: 'Flamengo',
-      awayTeam: 'Palmeiras',
-      homeScore: 2,
-      awayScore: 1,
-      prediction: { homeScore: 2, awayScore: 1 },
-      result: 'exact'
-    },
-    {
-      id: '2',
-      homeTeam: 'São Paulo',
-      awayTeam: 'Corinthians',
-      homeScore: 1,
-      awayScore: 0,
-      prediction: { homeScore: 2, awayScore: 0 },
-      result: 'winner'
-    },
-    {
-      id: '3',
-      homeTeam: 'Atlético-MG',
-      awayTeam: 'Cruzeiro',
-      homeScore: 0,
-      awayScore: 0,
-      prediction: { homeScore: 1, awayScore: 2 },
-      result: 'miss'
-    }
-  ];
+  const [gameResults, setGameResults] = useState<GameResult[]>([]);
+  const [ranking, setRanking] = useState<RankingPlayer[]>([]);
 
-  // Mock data for ranking
-  const ranking: RankingPlayer[] = [
-    { id: '1', name: 'Maria Silva', position: 1, points: 280, exactPredictions: 15 },
-    { id: '2', name: 'João Santos', position: 2, points: 265, exactPredictions: 14 },
-    { id: '3', name: 'Pedro Costa', position: 3, points: 245, exactPredictions: 12 },
-    { id: '4', name: 'Ana Lima', position: 4, points: 240, exactPredictions: 11 },
-    { id: '5', name: 'Carlos Oliveira', position: 5, points: 235, exactPredictions: 10 },
-    { id: '6', name: 'Lucia Ferreira', position: 6, points: 230, exactPredictions: 9 },
-    { id: '7', name: 'Roberto Alves', position: 7, points: 225, exactPredictions: 8 },
-    { id: '8', name: 'Mariana Souza', position: 8, points: 220, exactPredictions: 7 },
-    { id: '9', name: 'Fernando Lima', position: 9, points: 215, exactPredictions: 6 },
-    { id: '10', name: 'Carla Santos', position: 10, points: 210, exactPredictions: 5 }
-  ];
+  useEffect(() => {
+    async function load() {
+      try {
+        const matches = await getMatches();
+        const preds = await getPredictions().catch(() => []);
+        const lastRound = matches.reduce((acc: number, m: any) => Math.max(acc, m.round), 0);
+        const roundMatches = matches.filter((m: any) => m.round === lastRound && m.home_score !== null);
+
+        const results: GameResult[] = roundMatches.map((m: any) => {
+          const date = new Date(m.match_date);
+          const pred = preds.find((p: any) => p.match_id === m.id);
+          const resultType = (() => {
+            if (!pred) return 'miss';
+            if (pred.home_score === m.home_score && pred.away_score === m.away_score) return 'exact';
+            const matchOutcome = Math.sign(m.home_score - m.away_score);
+            const predOutcome = Math.sign(pred.home_score - pred.away_score);
+            return matchOutcome === predOutcome ? 'winner' : 'miss';
+          })();
+          return {
+            id: String(m.id),
+            homeTeam: m.home_team,
+            awayTeam: m.away_team,
+            round: m.round,
+            homeScore: m.home_score,
+            awayScore: m.away_score,
+            prediction: pred ? { homeScore: pred.home_score, awayScore: pred.away_score } : undefined,
+            result: resultType as 'exact' | 'winner' | 'miss',
+          };
+        });
+        setGameResults(results);
+
+        const rankData = await getRanking();
+        setRanking(rankData);
+      } catch {
+        // ignore errors
+      }
+    }
+    load();
+  }, []);
 
   const getResultIcon = (result: string) => {
     switch (result) {
@@ -102,6 +101,20 @@ const ResultadosPage = () => {
     return 'text-foreground';
   };
 
+  const summary = gameResults.reduce(
+    (acc, g) => {
+      if (g.result === 'exact') {
+        acc.exact += 1;
+        acc.points += 3;
+      } else if (g.result === 'winner') {
+        acc.winner += 1;
+        acc.points += 1;
+      }
+      return acc;
+    },
+    { exact: 0, winner: 0, points: 0 }
+  );
+
   return (
     <div className="min-h-screen pb-20 bg-gradient-to-b from-background to-secondary/20">
       <div className="p-4 space-y-6">
@@ -122,7 +135,7 @@ const ResultadosPage = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Target className="h-5 w-5" />
-                  Rodada 24 - Seus Resultados
+                  Rodada {gameResults[0]?.round ?? ''} - Seus Resultados
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -170,15 +183,15 @@ const ResultadosPage = () => {
                   <h3 className="text-lg font-bold">Resumo da Rodada</h3>
                   <div className="grid grid-cols-3 gap-4 text-center">
                     <div>
-                      <p className="text-2xl font-bold">1</p>
+                      <p className="text-2xl font-bold">{summary.exact}</p>
                       <p className="text-sm text-white/80">Placar exato</p>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">1</p>
+                      <p className="text-2xl font-bold">{summary.winner}</p>
                       <p className="text-sm text-white/80">Vencedor</p>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">25</p>
+                      <p className="text-2xl font-bold">{summary.points}</p>
                       <p className="text-sm text-white/80">Pontos ganhos</p>
                     </div>
                   </div>
@@ -214,9 +227,6 @@ const ResultadosPage = () => {
                     
                     <div className="flex-1">
                       <p className="font-medium">{player.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {player.exactPredictions} placares exatos
-                      </p>
                     </div>
                     
                     <div className="text-right">

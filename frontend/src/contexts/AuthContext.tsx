@@ -1,5 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { getRanking } from '@/lib/api';
 
 interface User {
   id: string;
@@ -50,13 +51,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .then(async (res) => {
         if (!res.ok) throw new Error('Failed');
         const data = await res.json();
+        const ranking = await getRanking().catch(() => []);
+        const entry = ranking.find((r: any) => String(r.id) === data.id);
         setUser({
           id: data.id,
           name: data.name,
           email: data.email,
           avatar: '',
-          points: 0,
-          position: 0,
+          points: entry?.points || 0,
+          position: entry?.position || 0,
           exactPredictions: 0,
           roundsWon: 0
         });
@@ -79,13 +82,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const data = await res.json();
     localStorage.setItem('token', data.token);
+    const ranking = await getRanking().catch(() => []);
+    const entry = ranking.find((r: any) => String(r.id) === data.user.id);
     setUser({
       id: data.user.id,
       name: data.user.name,
       email: data.user.email,
       avatar: '',
-      points: 0,
-      position: 0,
+      points: entry?.points || 0,
+      position: entry?.position || 0,
       exactPredictions: 0,
       roundsWon: 0
     });
@@ -107,13 +112,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const data = await res.json();
     localStorage.setItem('token', data.token);
+    const ranking = await getRanking().catch(() => []);
+    const entry = ranking.find((r: any) => String(r.id) === data.user.id);
     setUser({
       id: data.user.id,
       name: data.user.name,
       email: data.user.email,
       avatar: '',
-      points: 0,
-      position: 0,
+      points: entry?.points || 0,
+      position: entry?.position || 0,
       exactPredictions: 0,
       roundsWon: 0
     });

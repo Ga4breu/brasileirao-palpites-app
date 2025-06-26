@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Clock, Save } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
+import { getMatches, getPredictions, savePrediction } from '@/lib/api';
 
 interface Game {
   id: string;
@@ -20,18 +21,38 @@ interface Game {
 
 const PalpitesPage = () => {
   const navigate = useNavigate();
+  const [games, setGames] = useState<Game[]>([]);
   const [predictions, setPredictions] = useState<Record<string, { home: string; away: string }>>({});
   const [saving, setSaving] = useState(false);
 
-  // Mock data for current round games
-  const games: Game[] = [
-    { id: '1', homeTeam: 'Flamengo', awayTeam: 'Palmeiras', date: '01/07', time: '16:00' },
-    { id: '2', homeTeam: 'São Paulo', awayTeam: 'Corinthians', date: '01/07', time: '18:30' },
-    { id: '3', homeTeam: 'Atlético-MG', awayTeam: 'Cruzeiro', date: '02/07', time: '20:00' },
-    { id: '4', homeTeam: 'Internacional', awayTeam: 'Grêmio', date: '02/07', time: '21:30' },
-    { id: '5', homeTeam: 'Santos', awayTeam: 'Botafogo', date: '03/07', time: '19:00' },
-    { id: '6', homeTeam: 'Vasco', awayTeam: 'Fluminense', date: '03/07', time: '21:00' }
-  ];
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await getMatches();
+        const userPreds = await getPredictions().catch(() => []);
+        setGames(
+          data.map((m: any) => {
+            const date = new Date(m.match_date);
+            return {
+              id: String(m.id),
+              homeTeam: m.home_team,
+              awayTeam: m.away_team,
+              date: date.toLocaleDateString('pt-BR'),
+              time: date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            } as Game;
+          })
+        );
+        const map: Record<string, { home: string; away: string }> = {};
+        userPreds.forEach((p: any) => {
+          map[p.match_id] = { home: String(p.home_score), away: String(p.away_score) };
+        });
+        setPredictions(map);
+      } catch {
+        toast({ title: 'Erro', description: 'Não foi possível carregar jogos', variant: 'destructive' });
+      }
+    }
+    load();
+  }, []);
 
   const updatePrediction = (gameId: string, team: 'home' | 'away', value: string) => {
     setPredictions(prev => ({
@@ -45,23 +66,40 @@ const PalpitesPage = () => {
 
   const handleSave = async () => {
     setSaving(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    toast({
-      title: "Palpites salvos!",
-      description: "Seus palpites foram salvos com sucesso."
-    });
-    
-    setSaving(false);
-    navigate('/');
+    try {
+      for (const game of games) {
+        const pred = predictions[game.id];
+        if (pred) {
+          await savePrediction(Number(game.id), Number(pred.home), Number(pred.away));
+        }
+      }
+      toast({
+        title: 'Palpites salvos!',
+        description: 'Seus palpites foram salvos com sucesso.'
+      });
+      navigate('/');
+    } catch {
+      toast({ title: 'Erro', description: 'Falha ao salvar palpites', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const isFormComplete = games.every(game => 
     predictions[game.id]?.home && predictions[game.id]?.away
   );
 
-  const timeRemaining = "2h 30min";
+  const timeRemaining = (() => {
+    if (!games.length) return '';
+    const firstDate = new Date(
+      `${games[0].date.split('/').reverse().join('-')}T${games[0].time}`
+    );
+    const diff = firstDate.getTime() - Date.now();
+    if (diff <= 0) return 'Encerrado';
+    const h = Math.floor(diff / 1000 / 60 / 60);
+    const m = Math.floor((diff / 1000 / 60) % 60);
+    return `${h}h ${m}min`;
+  })();
 
   return (
     <div className="min-h-screen pb-24 bg-gradient-to-b from-background to-secondary/20">
@@ -77,7 +115,9 @@ const PalpitesPage = () => {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-xl font-bold">Palpites da Rodada 25</h1>
+            <h1 className="text-xl font-bold">
+              Palpites da Rodada {games[0]?.round ?? ''}
+            </h1>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Clock className="h-4 w-4" />
               <span>Fecha em {timeRemaining}</span>

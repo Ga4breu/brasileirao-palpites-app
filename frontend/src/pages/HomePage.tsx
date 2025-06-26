@@ -5,23 +5,60 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, Clock, Target, Calendar } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { getMatches, getRanking } from '@/lib/api';
 
 const HomePage = () => {
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
   const navigate = useNavigate();
 
-  // Mock data for current round
-  const currentRound = {
-    number: 25,
+  const [currentRound, setCurrentRound] = useState({
+    number: 0,
     nextGame: {
-      date: '2024-07-01',
-      time: '16:00',
-      homeTeam: 'Flamengo',
-      awayTeam: 'Palmeiras'
+      date: '',
+      time: '',
+      homeTeam: '',
+      awayTeam: ''
     },
-    deadline: '2h 30min',
-    isPredictionOpen: true
-  };
+    deadline: '',
+    isPredictionOpen: false
+  });
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [matches, ranking] = await Promise.all([getMatches(), getRanking()]);
+        if (user) {
+          const entry = (ranking as Array<{id:string;points:number;position:number}>).find(r => String(r.id) === user.id);
+          if (entry) {
+            updateProfile({ points: entry.points, position: entry.position });
+          }
+        }
+        if (matches.length) {
+          const upcoming = matches.find((m: {match_date: string}) => new Date(m.match_date) > new Date());
+          const nextMatch = upcoming || matches[matches.length - 1];
+          const nextDate = new Date(nextMatch.match_date);
+          const diff = nextDate.getTime() - Date.now();
+          const h = Math.max(0, Math.floor(diff / 1000 / 60 / 60));
+          const m = Math.max(0, Math.floor((diff / 1000 / 60) % 60));
+          setCurrentRound({
+            number: nextMatch.round,
+            nextGame: {
+              date: nextDate.toLocaleDateString('pt-BR'),
+              time: nextDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+              homeTeam: nextMatch.home_team,
+              awayTeam: nextMatch.away_team,
+            },
+            deadline: `${h}h ${m}min`,
+            isPredictionOpen: diff > 0,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
+    load();
+  }, []);
 
   const stats = [
     { icon: Trophy, label: 'Posição Geral', value: `${user?.position}°`, color: 'text-brazilian-yellow' },
