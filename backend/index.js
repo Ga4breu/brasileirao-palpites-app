@@ -138,6 +138,9 @@ app.get('/api/ranking', (req, res) => {
 
   res.json(ranking);
 });
+app.get('/', (req, res) => {
+  res.json({ message: 'API do boleirão rodando!' });
+});
 
 const port = process.env.PORT || 3001;
 app.listen(port, () => {
